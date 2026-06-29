@@ -1,6 +1,8 @@
 import os
 import torch
 from PIL import Image
+if not hasattr(Image, 'ANTIALIAS'):
+    Image.ANTIALIAS = getattr(Image, 'Resampling', Image).LANCZOS
 try:
     from vietocr.tool.predictor import Predictor
     from vietocr.tool.config import Cfg
