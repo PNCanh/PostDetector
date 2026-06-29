@@ -87,10 +87,18 @@ class MutationGenerator:
         output_dir = self.config.POSTS_DIR
         os.makedirs(output_dir, exist_ok=True)
         
-        # Collect existing contents
+        # Collect existing contents and find max post number
         existing_contents = []
+        max_post_num = 0
+        import re
         if os.path.exists(self.config.POSTS_DIR):
             for post_folder in os.listdir(self.config.POSTS_DIR):
+                match = re.search(r'\d+', post_folder)
+                if match:
+                    num = int(match.group())
+                    if num > max_post_num:
+                        max_post_num = num
+                        
                 content_path = os.path.join(self.config.POSTS_DIR, post_folder, 'text.txt')
                 if os.path.exists(content_path):
                     with open(content_path, 'r', encoding='utf-8') as f:
@@ -99,13 +107,16 @@ class MutationGenerator:
         if not existing_contents:
             print(f"No existing posts found to mutate from. Looked in: {self.config.POSTS_DIR}")
             return
+            
+        current_post_num = max_post_num + 1
 
         print(f"Generating {num_samples} mutated samples...")
         for i in range(num_samples):
             base_text = random.choice(existing_contents)
             mutated_text = self.mutate_text(base_text)
             
-            post_id = f"mutated_{uuid.uuid4().hex[:8]}"
+            post_id = f"post_{current_post_num:01d}"
+            current_post_num += 1
             post_path = os.path.join(output_dir, post_id)
             os.makedirs(post_path, exist_ok=True)
             

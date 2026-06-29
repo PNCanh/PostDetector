@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import KFold
+from torch.cuda.amp import GradScaler, autocast
 from .losses import MultiTaskLoss
 from .optimizers import create_optimizer_and_scheduler
 from utils.metrics import calculate_metrics
@@ -26,12 +27,24 @@ class Trainer:
         train_loader = DataLoader(train_sub, batch_size=self.config.BATCH_SIZE, shuffle=True, drop_last=True)
         val_loader = DataLoader(val_sub, batch_size=self.config.BATCH_SIZE, shuffle=False)
         
+        # Clear GPU cache before each fold
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         # Instantiate model fresh for each fold
         if self.model_name == "Proposed":
             model = self.model_class(self.config, self.dataset.num_explanations).to(self.device)
+            # Enable gradient checkpointing to reduce activation memory
+            for module in model.modules():
+                if hasattr(module, 'gradient_checkpointing_enable'):
+                    module.gradient_checkpointing_enable()
         else:
             model = self.model_class(self.config).to(self.device)
-            
+
+        # Mixed precision scaler
+        use_amp = torch.cuda.is_available()
+        scaler = GradScaler(enabled=use_amp)
+
         optimizer, scheduler = create_optimizer_and_scheduler(model, self.config, len(train_loader))
         
         # MultiTaskLoss gracefully handles models that return None for explanations
@@ -48,25 +61,27 @@ class Trainer:
             total_train_loss = 0
             
             for batch in train_loader:
-                optimizer.zero_grad()
-                
+                optimizer.zero_grad(set_to_none=True)  # More memory efficient
+
                 input_ids = batch['input_ids'].to(self.device)
                 attention_mask = batch['attention_mask'].to(self.device)
                 images = batch['image'].to(self.device)
                 labels = batch['label'].to(self.device)
                 explanations = batch['explanation'].to(self.device)
-                
-                label_out, exp_out = model(input_ids, attention_mask, images)
-                
-                loss, _, _ = criterion(label_out, exp_out, labels, explanations)
-                
-                loss.backward()
+
+                with autocast(enabled=use_amp):
+                    label_out, exp_out = model(input_ids, attention_mask, images)
+                    loss, _, _ = criterion(label_out, exp_out, labels, explanations)
+
+                scaler.scale(loss).backward()
                 # Gradient clipping
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                
-                optimizer.step()
+
+                scaler.step(optimizer)
+                scaler.update()
                 scheduler.step()
-                
+
                 total_train_loss += loss.item()
                 
             avg_train_loss = total_train_loss / len(train_loader)
@@ -85,12 +100,13 @@ class Trainer:
                     images = batch['image'].to(self.device)
                     labels = batch['label'].to(self.device)
                     explanations = batch['explanation'].to(self.device)
-                    
-                    label_out, exp_out = model(input_ids, attention_mask, images)
-                    loss, _, _ = criterion(label_out, exp_out, labels, explanations)
-                    
+
+                    with autocast(enabled=use_amp):
+                        label_out, exp_out = model(input_ids, attention_mask, images)
+                        loss, _, _ = criterion(label_out, exp_out, labels, explanations)
+
                     total_val_loss += loss.item()
-                    
+
                     probs = torch.sigmoid(label_out)
                     all_labels.extend(labels.cpu().numpy())
                     all_preds.extend(probs.cpu().numpy())
@@ -105,14 +121,22 @@ class Trainer:
             if metrics['roc_auc'] > best_val_auc:
                 best_val_auc = metrics['roc_auc']
                 torch.save(model.state_dict(), fold_model_path)
-                
+
         plot_loss(train_losses, val_losses, f"{self.model_name}_Fold{fold+1}", self.config.RESULTS_DIR)
+
+        # Free GPU memory after fold
+        del model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
-        # Return best metrics for this fold (re-evaluating on best model could be done, but we'll approximate with last best)
-        # For simplicity, returning the final metrics (or we could load best model and evaluate)
-        model.load_state_dict(torch.load(fold_model_path))
+        # Return best metrics for this fold using best saved model
+        if self.model_name == "Proposed":
+            model = self.model_class(self.config, self.dataset.num_explanations).to(self.device)
+        else:
+            model = self.model_class(self.config).to(self.device)
+        model.load_state_dict(torch.load(fold_model_path, map_location=self.device))
         model.eval()
-        
+
         all_labels = []
         all_preds = []
         with torch.no_grad():
@@ -121,13 +145,17 @@ class Trainer:
                 attention_mask = batch['attention_mask'].to(self.device)
                 images = batch['image'].to(self.device)
                 labels = batch['label'].to(self.device)
-                
-                label_out, _ = model(input_ids, attention_mask, images)
+
+                with autocast(enabled=use_amp):
+                    label_out, _ = model(input_ids, attention_mask, images)
                 probs = torch.sigmoid(label_out)
                 all_labels.extend(labels.cpu().numpy())
                 all_preds.extend(probs.cpu().numpy())
-                
+
         best_metrics = calculate_metrics(np.array(all_labels), np.array(all_preds))
+        del model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         return best_metrics
 
     def run_cv(self):

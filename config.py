@@ -43,9 +43,9 @@ class Config:
     MAX_TEXT_LENGTH = 256
     
     # Training configuration
-    BATCH_SIZE = 8
+    BATCH_SIZE = 16
     NUM_EPOCHS = 10
-    LEARNING_RATE = 2e-5
+    LEARNING_RATE = 5e-5
     WEIGHT_DECAY = 0.01
     K_FOLDS = 5
     TEST_SPLIT = 0.15 # 15% holdout test set
