@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import KFold
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from .losses import MultiTaskLoss
 from .optimizers import create_optimizer_and_scheduler
 from utils.metrics import calculate_metrics
@@ -28,6 +28,8 @@ class Trainer:
         val_loader = DataLoader(val_sub, batch_size=self.config.BATCH_SIZE, shuffle=False)
         
         # Clear GPU cache before each fold
+        import gc
+        gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -43,7 +45,7 @@ class Trainer:
 
         # Mixed precision scaler
         use_amp = torch.cuda.is_available()
-        scaler = GradScaler(enabled=use_amp)
+        scaler = GradScaler('cuda', enabled=use_amp)
 
         optimizer, scheduler = create_optimizer_and_scheduler(model, self.config, len(train_loader))
         
@@ -69,7 +71,7 @@ class Trainer:
                 labels = batch['label'].to(self.device)
                 explanations = batch['explanation'].to(self.device)
 
-                with autocast(enabled=use_amp):
+                with autocast('cuda', enabled=use_amp):
                     label_out, exp_out = model(input_ids, attention_mask, images)
                     loss, _, _ = criterion(label_out, exp_out, labels, explanations)
 
@@ -83,6 +85,9 @@ class Trainer:
                 scheduler.step()
 
                 total_train_loss += loss.item()
+                
+                # Free memory
+                del input_ids, attention_mask, images, labels, explanations, label_out, exp_out, loss
                 
             avg_train_loss = total_train_loss / len(train_loader)
             train_losses.append(avg_train_loss)
@@ -101,7 +106,7 @@ class Trainer:
                     labels = batch['label'].to(self.device)
                     explanations = batch['explanation'].to(self.device)
 
-                    with autocast(enabled=use_amp):
+                    with autocast('cuda', enabled=use_amp):
                         label_out, exp_out = model(input_ids, attention_mask, images)
                         loss, _, _ = criterion(label_out, exp_out, labels, explanations)
 
@@ -110,6 +115,9 @@ class Trainer:
                     probs = torch.sigmoid(label_out)
                     all_labels.extend(labels.cpu().numpy())
                     all_preds.extend(probs.cpu().numpy())
+                    
+                    # Free memory
+                    del input_ids, attention_mask, images, labels, explanations, label_out, exp_out, loss, probs
             
             avg_val_loss = total_val_loss / len(val_loader)
             val_losses.append(avg_val_loss)
@@ -125,7 +133,9 @@ class Trainer:
         plot_loss(train_losses, val_losses, f"{self.model_name}_Fold{fold+1}", self.config.RESULTS_DIR)
 
         # Free GPU memory after fold
-        del model
+        del model, optimizer, scheduler, scaler, criterion
+        import gc
+        gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         
@@ -146,14 +156,18 @@ class Trainer:
                 images = batch['image'].to(self.device)
                 labels = batch['label'].to(self.device)
 
-                with autocast(enabled=use_amp):
+                with autocast('cuda', enabled=use_amp):
                     label_out, _ = model(input_ids, attention_mask, images)
                 probs = torch.sigmoid(label_out)
                 all_labels.extend(labels.cpu().numpy())
                 all_preds.extend(probs.cpu().numpy())
+                
+                del input_ids, attention_mask, images, labels, label_out, probs
 
         best_metrics = calculate_metrics(np.array(all_labels), np.array(all_preds))
         del model
+        import gc
+        gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         return best_metrics
@@ -202,9 +216,9 @@ class Trainer:
         test_sub = Subset(self.dataset, test_indices)
         test_loader = DataLoader(test_sub, batch_size=self.config.BATCH_SIZE, shuffle=False)
         
-        # Load the best fold model or ensemble them. Here we just use fold 1 for demonstration, 
-        # or average predictions of all 5 folds.
-        models = []
+        all_labels = []
+        all_fold_preds = []
+        
         for fold in range(self.config.K_FOLDS):
             if self.model_name == "Proposed":
                 model = self.model_class(self.config, self.dataset.num_explanations).to(self.device)
@@ -213,31 +227,35 @@ class Trainer:
             model_path = os.path.join(self.config.MODEL_SAVE_DIR, f"{self.model_name}_fold{fold+1}.pt")
             model.load_state_dict(torch.load(model_path))
             model.eval()
-            models.append(model)
             
-        all_labels = []
-        all_preds = []
-        
-        with torch.no_grad():
-            for batch in test_loader:
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                images = batch['image'].to(self.device)
-                labels = batch['label'].to(self.device)
-                
-                batch_preds = []
-                for model in models:
+            fold_preds = []
+            with torch.no_grad():
+                for batch in test_loader:
+                    input_ids = batch['input_ids'].to(self.device)
+                    attention_mask = batch['attention_mask'].to(self.device)
+                    images = batch['image'].to(self.device)
+                    labels = batch['label'].to(self.device)
+                    
                     label_out, _ = model(input_ids, attention_mask, images)
                     probs = torch.sigmoid(label_out)
-                    batch_preds.append(probs.cpu().numpy())
+                    fold_preds.extend(probs.cpu().numpy())
                     
-                # Average predictions
-                avg_probs = np.mean(batch_preds, axis=0)
+                    if fold == 0:
+                        all_labels.extend(labels.cpu().numpy())
+                    
+                    del input_ids, attention_mask, images, labels, label_out, probs
+            
+            all_fold_preds.append(fold_preds)
+            del model
+            import gc
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
                 
-                all_labels.extend(labels.cpu().numpy())
-                all_preds.extend(avg_probs)
+        # Average predictions
+        avg_probs = np.mean(all_fold_preds, axis=0)
                 
-        test_metrics = calculate_metrics(np.array(all_labels), np.array(all_preds))
+        test_metrics = calculate_metrics(np.array(all_labels), np.array(avg_probs))
         print("Test Set Metrics:")
         print(json.dumps(test_metrics, indent=4))
         
