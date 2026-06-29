@@ -20,6 +20,19 @@ class MutationGenerator:
         
         self.teencode_dict = self._load_json_dict(self.config.TEENCODE_FILE)
         self.abbrev_dict = self._load_json_dict(self.config.ABBREVIATION_FILE)
+        
+        self.labels_config = self._load_json_dict(self.config.LABELS_FILE)
+        self.label_map = self._build_label_map(self.labels_config)
+
+    def _build_label_map(self, labels_config: dict) -> dict:
+        label_map = {}
+        if 'binary' in labels_config:
+            for k, v in labels_config['binary'].items():
+                label_map[k] = v.get('id', 1)
+        if 'multiclass' in labels_config:
+            for k, v in labels_config['multiclass'].items():
+                label_map[k] = v.get('id', 1)
+        return label_map
 
     def _extract_strings_from_json(self, data):
         result = []
@@ -198,7 +211,7 @@ class MutationGenerator:
                 "interactions": random.randint(0, 1000),
                 "platform": random.choice(existing_platforms),
                 "account_type": random.choice(existing_account_types),
-                "label": random.randint(0, 1), # mutated typically implies fake/spam
+                "label": self.label_map.get(chosen_label, 1) if chosen_label else random.randint(0, 1),
                 "explanation": random.choice(existing_explanations),
                 "content_file": "text.txt"
             }
