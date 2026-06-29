@@ -115,7 +115,7 @@ class MutationGenerator:
             base_text = random.choice(existing_contents)
             mutated_text = self.mutate_text(base_text)
             
-            post_id = f"post_{current_post_num:01d}"
+            post_id = f"post{current_post_num:01d}"
             current_post_num += 1
             post_path = os.path.join(output_dir, post_id)
             os.makedirs(post_path, exist_ok=True)
