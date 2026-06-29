@@ -118,7 +118,7 @@ class MutationGenerator:
                 "interactions": random.randint(0, 1000),
                 "platform": "synthetic",
                 "account_type": "synthetic",
-                "label": 1, # mutated typically implies fake/spam
+                "label": random.randint(0, 1), # mutated typically implies fake/spam
                 "explanation": "synthetic_mutation",
                 "content_file": "content.txt"
             }
