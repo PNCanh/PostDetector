@@ -14,8 +14,9 @@ class MutationGenerator:
         self.config = config_class
         
         # Load resources
-        self.keywords = self._load_json_list(self.config.KEYWORDS_FILE)
+        self.keywords = self._load_json_dict(self.config.KEYWORDS_FILE)
         self.stopwords = self._load_json_list(self.config.STOPWORDS_FILE)
+        self.lexicons = self._load_json_list(self.config.LEXICONS_FILE)
         
         self.teencode_dict = self._load_json_dict(self.config.TEENCODE_FILE)
         self.abbrev_dict = self._load_json_dict(self.config.ABBREVIATION_FILE)
@@ -54,27 +55,34 @@ class MutationGenerator:
         except Exception:
             return {}
 
-    def mutate_text(self, text: str) -> str:
+    def mutate_text(self, text: str, label: str = None) -> str:
         words = text.split()
         mutated_words = []
+        
+        teencode = self.teencode_dict.get(label, {}) if label and isinstance(self.teencode_dict, dict) else {}
+        abbrev = self.abbrev_dict.get(label, {}) if label and isinstance(self.abbrev_dict, dict) else {}
+        keys = self.keywords.get(label, []) if label and isinstance(self.keywords, dict) else []
+        
         for word in words:
             # 1. Randomly replace with teencode or abbreviation
-            if word.lower() in self.teencode_dict and random.random() < 0.3:
-                mutated_words.append(self.teencode_dict[word.lower()])
+            if teencode and word.lower() in teencode and random.random() < 0.1:
+                mutated_words.append(teencode[word.lower()])
                 continue
-            if word.lower() in self.abbrev_dict and random.random() < 0.3:
-                mutated_words.append(self.abbrev_dict[word.lower()])
+            if abbrev and word.lower() in abbrev and random.random() < 0.1:
+                mutated_words.append(abbrev[word.lower()])
                 continue
             
             # 2. Randomly drop stop words
-            if word.lower() in self.stopwords and random.random() < 0.2:
+            if word.lower() in self.stopwords and random.random() < 0.4:
                 continue
                 
             mutated_words.append(word)
             
-            # 3. Randomly insert keywords
-            if random.random() < 0.05 and self.keywords:
-                mutated_words.append(random.choice(self.keywords))
+            # 3. Randomly insert keywords and lexicons
+            if keys and random.random() < 0.05:
+                mutated_words.append(random.choice(keys))
+            if self.lexicons and random.random() < 0.05:
+                mutated_words.append(random.choice(self.lexicons))
                 
         # 4. Random shuffle some words
         if random.random() < 0.2 and len(mutated_words) > 5:
@@ -82,6 +90,27 @@ class MutationGenerator:
             mutated_words[idx1], mutated_words[idx2] = mutated_words[idx2], mutated_words[idx1]
             
         return " ".join(mutated_words)
+
+    def generate_synthetic_text(self, label: str = None) -> str:
+        vocab = []
+        teencode = self.teencode_dict.get(label, {}) if label and isinstance(self.teencode_dict, dict) else {}
+        abbrev = self.abbrev_dict.get(label, {}) if label and isinstance(self.abbrev_dict, dict) else {}
+        
+        if self.lexicons:
+            vocab.extend(self.lexicons)
+        if teencode:
+            vocab.extend(list(teencode.keys()))
+            vocab.extend(list(teencode.values()))
+        if abbrev:
+            vocab.extend(list(abbrev.keys()))
+            vocab.extend(list(abbrev.values()))
+            
+        if not vocab:
+            return "synthetic mutated post no vocabulary available"
+            
+        length = random.randint(15, 100)
+        words = random.choices(vocab, k=length)
+        return " ".join(words)
 
     def generate_mutated_dataset(self, num_samples: int = 100):
         output_dir = self.config.POSTS_DIR
@@ -119,9 +148,9 @@ class MutationGenerator:
                         pass
         
         if not existing_contents:
-            print(f"No existing posts found to mutate from. Looked in: {self.config.POSTS_DIR}")
-            return
+            print(f"No existing posts found to mutate from. Will use purely synthetic content.")
             
+
         if not existing_platforms: existing_platforms = ["synthetic"]
         if not existing_account_types: existing_account_types = ["synthetic"]
         if not existing_explanations: existing_explanations = ["synthetic_mutation"]
@@ -134,9 +163,21 @@ class MutationGenerator:
         start_date = datetime.datetime(2025, 1, 1)
         end_date = datetime.datetime(2026, 1, 6)
         
+        all_labels = set()
+        for d in [self.keywords, self.teencode_dict, self.abbrev_dict]:
+            if isinstance(d, dict):
+                all_labels.update(d.keys())
+        all_labels = list(all_labels)
+
         for i in tqdm(range(num_samples), desc="Generating Mutations"):
-            base_text = random.choice(existing_contents)
-            mutated_text = self.mutate_text(base_text)
+            chosen_label = random.choice(all_labels) if all_labels else None
+            
+            if existing_contents and random.random() < 0.5:
+                base_text = random.choice(existing_contents)
+                mutated_text = self.mutate_text(base_text, chosen_label)
+            else:
+                base_text = self.generate_synthetic_text(chosen_label)
+                mutated_text = self.mutate_text(base_text, chosen_label)
             
             post_id = f"post{current_post_num:01d}"
             current_post_num += 1

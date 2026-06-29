@@ -26,6 +26,7 @@ class Config:
     
     RESOURCES_DIR = os.path.join(DRIVE_DIR, 'resources')
     LABELS_FILE = os.path.join(RESOURCES_DIR, 'labels.json')
+    LEXICONS_FILE = os.path.join(RESOURCES_DIR, 'lexicons.json')
     ABBREVIATION_FILE = os.path.join(RESOURCES_DIR, 'abbreviations.json')
     EXPLANATION_LABELS_FILE = os.path.join(RESOURCES_DIR, 'explanation_labels.json')
     KEYWORDS_FILE = os.path.join(RESOURCES_DIR, 'keywords.json')
