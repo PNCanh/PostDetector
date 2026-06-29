@@ -137,13 +137,20 @@ class MutationGenerator:
         max_post_num = 0
         import re
         if os.path.exists(self.config.POSTS_DIR):
-            for post_folder in os.listdir(self.config.POSTS_DIR):
+            post_folders = os.listdir(self.config.POSTS_DIR)
+            for post_folder in post_folders:
                 match = re.search(r'\d+', post_folder)
                 if match:
                     num = int(match.group())
                     if num > max_post_num:
                         max_post_num = num
                         
+            # Limit loading to max 200 posts to avoid slow I/O on Colab/Google Drive
+            sample_size = min(200, len(post_folders))
+            sampled_folders = random.sample(post_folders, sample_size) if post_folders else []
+            
+            from tqdm import tqdm
+            for post_folder in tqdm(sampled_folders, desc="Loading context"):
                 content_path = os.path.join(self.config.POSTS_DIR, post_folder, 'text.txt')
                 if os.path.exists(content_path):
                     with open(content_path, 'r', encoding='utf-8') as f:
