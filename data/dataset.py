@@ -53,7 +53,7 @@ class PostDataset(Dataset):
         explanation_id = self.explanation_map.get(explanation_str, -1)
         
         # 2. Load Content Text
-        content_path = os.path.join(post_path, 'content.txt')
+        content_path = os.path.join(post_path, 'text.txt')
         text_content = ""
         if os.path.exists(content_path):
             with open(content_path, 'r', encoding='utf-8') as f:
