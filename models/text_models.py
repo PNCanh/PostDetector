@@ -16,12 +16,16 @@ class TextFeatureExtractor(nn.Module):
         
         try:
             self.encoder = AutoModel.from_pretrained(model_name)
+            if hasattr(self.encoder.config, 'use_cache'):
+                self.encoder.config.use_cache = False
         except Exception as e:
             print(f"Failed to load {model_name} from HuggingFace. Trying as standard AutoModel... Error: {e}")
             # Fallback to phobert if strictly needed
             if 'visobert' in model_name.lower():
                 print("Falling back to vinai/phobert-base-v2 for text encoder due to missing ViSoBERT weights path.")
                 self.encoder = AutoModel.from_pretrained("vinai/phobert-base-v2")
+                if hasattr(self.encoder.config, 'use_cache'):
+                    self.encoder.config.use_cache = False
             else:
                 raise e
 

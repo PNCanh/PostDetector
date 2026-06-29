@@ -36,7 +36,7 @@ class Config:
     MODELS = {
         'phobert': 'vinai/phobert-base-v2',
         'xlm_r': 'xlm-roberta-base',
-        'visobert': 'qnamng/ViSoBERT'  # GitHub repo link provided, assuming HuggingFace path or fallback to be loaded correctly
+        'visobert': 'uitnlp/visobert'  # Official ViSoBERT repo on HuggingFace
     }
 
     IMAGE_SIZE = (224, 224)

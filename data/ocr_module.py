@@ -1,6 +1,8 @@
 import os
 import torch
 from PIL import Image
+if not hasattr(Image, 'ANTIALIAS'):
+    Image.ANTIALIAS = getattr(Image, 'Resampling', Image).LANCZOS
 try:
     from vietocr.tool.predictor import Predictor
     from vietocr.tool.config import Cfg
@@ -55,7 +57,8 @@ class OCRModule:
         processed = 0
         skipped = 0
 
-        for idx, post_folder in enumerate(post_folders):
+        from tqdm import tqdm
+        for idx, post_folder in enumerate(tqdm(post_folders, desc="Extracting OCR")):
             post_path = os.path.join(self.config.POSTS_DIR, post_folder)
 
             # Find image file inside the post folder by extension
@@ -76,8 +79,6 @@ class OCRModule:
                 with open(ocr_output_path, 'w', encoding='utf-8') as f:
                     f.write(text)
                 processed += 1
-                if processed % 50 == 0 or processed == 1:
-                    print(f"  OCR progress: {idx+1}/{total} folders scanned, {processed} processed")
             # else: already done, skip silently
 
         print(f"OCR complete. Processed: {processed}, Already done (skipped): {total - processed - skipped}, No image: {skipped}")

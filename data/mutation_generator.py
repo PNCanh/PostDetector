@@ -89,6 +89,9 @@ class MutationGenerator:
         
         # Collect existing contents and find max post number
         existing_contents = []
+        existing_platforms = []
+        existing_account_types = []
+        existing_explanations = []
         max_post_num = 0
         import re
         if os.path.exists(self.config.POSTS_DIR):
@@ -103,15 +106,35 @@ class MutationGenerator:
                 if os.path.exists(content_path):
                     with open(content_path, 'r', encoding='utf-8') as f:
                         existing_contents.append(f.read())
+                        
+                json_path = os.path.join(self.config.POSTS_DIR, post_folder, 'post.json')
+                if os.path.exists(json_path):
+                    try:
+                        with open(json_path, 'r', encoding='utf-8') as f:
+                            jdata = json.load(f)
+                            if jdata.get('platform'): existing_platforms.append(jdata['platform'])
+                            if jdata.get('account_type'): existing_account_types.append(jdata['account_type'])
+                            if jdata.get('explanation'): existing_explanations.append(jdata['explanation'])
+                    except:
+                        pass
         
         if not existing_contents:
             print(f"No existing posts found to mutate from. Looked in: {self.config.POSTS_DIR}")
             return
             
+        if not existing_platforms: existing_platforms = ["synthetic"]
+        if not existing_account_types: existing_account_types = ["synthetic"]
+        if not existing_explanations: existing_explanations = ["synthetic_mutation"]
+            
         current_post_num = max_post_num + 1
 
+        from tqdm import tqdm
         print(f"Generating {num_samples} mutated samples...")
-        for i in range(num_samples):
+        import datetime
+        start_date = datetime.datetime(2025, 1, 1)
+        end_date = datetime.datetime(2026, 1, 6)
+        
+        for i in tqdm(range(num_samples), desc="Generating Mutations"):
             base_text = random.choice(existing_contents)
             mutated_text = self.mutate_text(base_text)
             
@@ -123,14 +146,19 @@ class MutationGenerator:
             with open(os.path.join(post_path, 'text.txt'), 'w', encoding='utf-8') as f:
                 f.write(mutated_text)
                 
+            random_days = random.randrange((end_date - start_date).days + 1)
+            random_date = start_date + datetime.timedelta(days=random_days)
+            random_date = random_date.replace(hour=random.randint(0, 23), minute=random.randint(0, 59))
+            timestamp = random_date.strftime("%H:%M %m/%d/%y")
+                
             post_json = {
                 "id": post_id,
-                "timestamp": "synthetic",
+                "timestamp": timestamp,
                 "interactions": random.randint(0, 1000),
-                "platform": "synthetic",
-                "account_type": "synthetic",
+                "platform": random.choice(existing_platforms),
+                "account_type": random.choice(existing_account_types),
                 "label": random.randint(0, 1), # mutated typically implies fake/spam
-                "explanation": "synthetic_mutation",
+                "explanation": random.choice(existing_explanations),
                 "content_file": "text.txt"
             }
             with open(os.path.join(post_path, 'post.json'), 'w', encoding='utf-8') as f:

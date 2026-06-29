@@ -73,16 +73,26 @@ class Trainer:
 
                 with autocast('cuda', enabled=use_amp):
                     label_out, exp_out = model(input_ids, attention_mask, images)
-                    loss, _, _ = criterion(label_out, exp_out, labels, explanations)
+                    
+                loss, _, _ = criterion(
+                    label_out.float(), 
+                    exp_out.float() if exp_out is not None else None, 
+                    labels.float(), 
+                    explanations.long()
+                )
 
                 scaler.scale(loss).backward()
                 # Gradient clipping
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
+                old_scaler_scale = scaler.get_scale()
                 scaler.step(optimizer)
                 scaler.update()
-                scheduler.step()
+                
+                # Check if optimizer step was skipped (which happens if scale decreased)
+                if scaler.get_scale() >= old_scaler_scale:
+                    scheduler.step()
 
                 total_train_loss += loss.item()
                 
@@ -108,7 +118,13 @@ class Trainer:
 
                     with autocast('cuda', enabled=use_amp):
                         label_out, exp_out = model(input_ids, attention_mask, images)
-                        loss, _, _ = criterion(label_out, exp_out, labels, explanations)
+                        
+                    loss, _, _ = criterion(
+                        label_out.float(), 
+                        exp_out.float() if exp_out is not None else None, 
+                        labels.float(), 
+                        explanations.long()
+                    )
 
                     total_val_loss += loss.item()
 
