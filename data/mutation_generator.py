@@ -91,7 +91,7 @@ class MutationGenerator:
         existing_contents = []
         if os.path.exists(self.config.POSTS_DIR):
             for post_folder in os.listdir(self.config.POSTS_DIR):
-                content_path = os.path.join(self.config.POSTS_DIR, post_folder, 'content.txt')
+                content_path = os.path.join(self.config.POSTS_DIR, post_folder, 'text.txt')
                 if os.path.exists(content_path):
                     with open(content_path, 'r', encoding='utf-8') as f:
                         existing_contents.append(f.read())
@@ -109,7 +109,7 @@ class MutationGenerator:
             post_path = os.path.join(output_dir, post_id)
             os.makedirs(post_path, exist_ok=True)
             
-            with open(os.path.join(post_path, 'content.txt'), 'w', encoding='utf-8') as f:
+            with open(os.path.join(post_path, 'text.txt'), 'w', encoding='utf-8') as f:
                 f.write(mutated_text)
                 
             post_json = {
