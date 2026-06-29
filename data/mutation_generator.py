@@ -97,7 +97,7 @@ class MutationGenerator:
                         existing_contents.append(f.read())
         
         if not existing_contents:
-            print("No existing posts found to mutate from.")
+            print(f"No existing posts found to mutate from. Looked in: {self.config.POSTS_DIR}")
             return
 
         print(f"Generating {num_samples} mutated samples...")
@@ -120,7 +120,7 @@ class MutationGenerator:
                 "account_type": "synthetic",
                 "label": random.randint(0, 1), # mutated typically implies fake/spam
                 "explanation": "synthetic_mutation",
-                "content_file": "content.txt"
+                "content_file": "text.txt"
             }
             with open(os.path.join(post_path, 'post.json'), 'w', encoding='utf-8') as f:
                 json.dump(post_json, f, ensure_ascii=False, indent=4)

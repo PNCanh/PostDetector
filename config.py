@@ -43,7 +43,7 @@ class Config:
     MAX_TEXT_LENGTH = 256
     
     # Training configuration
-    BATCH_SIZE = 16
+    BATCH_SIZE = 8
     NUM_EPOCHS = 10
     LEARNING_RATE = 2e-5
     WEIGHT_DECAY = 0.01
