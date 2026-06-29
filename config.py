@@ -9,7 +9,20 @@ class Config:
     
     DATASET_DIR = os.path.join(DRIVE_DIR, 'dataset')
     POSTS_DIR = os.path.join(DATASET_DIR, 'posts')
-    IMAGES_DIR = os.path.join(DATASET_DIR, 'images')
+    
+    try:
+        import google.colab
+        IN_COLAB = True
+    except ImportError:
+        IN_COLAB = False
+
+    if IN_COLAB:
+        import kagglehub
+        # Download latest version
+        IMAGES_DIR = kagglehub.dataset_download("cashbowman/ai-generated-images-vs-real-images")
+        print("Path to dataset files:", IMAGES_DIR)
+    else:
+        IMAGES_DIR = os.path.join(DATASET_DIR, 'images')
     
     RESOURCES_DIR = os.path.join(DRIVE_DIR, 'resources')
     LABELS_FILE = os.path.join(RESOURCES_DIR, 'labels.json')
