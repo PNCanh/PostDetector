@@ -84,13 +84,14 @@ class PostDataset(Dataset):
         )
         
         # 4. Load Image
-        img_path = os.path.join(post_path, 'img.png')
-        if not os.path.exists(img_path):
-            img_path = os.path.join(post_path, 'img.jpeg')
-        if not os.path.exists(img_path):
-            img_path = os.path.join(post_path, 'img.jpg')
+        img_path = None
+        valid_extensions = ('.png', '.jpeg', '.jpg', '.webp')
+        for f in os.listdir(post_path):
+            if f.lower().endswith(valid_extensions):
+                img_path = os.path.join(post_path, f)
+                break
             
-        if os.path.exists(img_path):
+        if img_path and os.path.exists(img_path):
             image_tensor = self.image_processor.process(img_path)
         else:
             # Dummy tensor if no image (using zeros)

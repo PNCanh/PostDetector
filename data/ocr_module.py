@@ -58,12 +58,12 @@ class OCRModule:
         for idx, post_folder in enumerate(post_folders):
             post_path = os.path.join(self.config.POSTS_DIR, post_folder)
 
-            # Find image file inside the post folder
+            # Find image file inside the post folder by extension
             img_path = None
-            for ext in ('img.png', 'img.jpeg', 'img.jpg'):
-                candidate = os.path.join(post_path, ext)
-                if os.path.exists(candidate):
-                    img_path = candidate
+            valid_extensions = ('.png', '.jpeg', '.jpg', '.webp')
+            for f in os.listdir(post_path):
+                if f.lower().endswith(valid_extensions):
+                    img_path = os.path.join(post_path, f)
                     break
 
             if img_path is None:
