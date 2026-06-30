@@ -1,0 +1,13 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Dataset and resources
+dataset/
+resource/
+resources/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/

@@ -14,7 +14,8 @@ class MutationGenerator:
         self.config = config_class
         
         # Load resources
-        self.keywords = self._load_json_dict(self.config.KEYWORDS_FILE)
+        keywords_raw = self._load_json_dict(self.config.KEYWORDS_FILE)
+        self.keywords = {k: list(set([s for s in self._extract_strings_from_json(v) if s.strip()])) for k, v in keywords_raw.items()}
         self.stopwords = self._load_json_list(self.config.STOPWORDS_FILE)
         self.lexicons = self._load_json_list(self.config.LEXICONS_FILE)
         
@@ -72,7 +73,7 @@ class MutationGenerator:
         words = text.split()
         mutated_words = []
         
-        teencode = self.teencode_dict.get(label, {}) if label and isinstance(self.teencode_dict, dict) else {}
+        teencode = self.teencode_dict if isinstance(self.teencode_dict, dict) else {}
         abbrev = self.abbrev_dict.get(label, {}) if label and isinstance(self.abbrev_dict, dict) else {}
         keys = self.keywords.get(label, []) if label and isinstance(self.keywords, dict) else []
         
@@ -106,7 +107,7 @@ class MutationGenerator:
 
     def generate_synthetic_text(self, label: str = None) -> str:
         vocab = []
-        teencode = self.teencode_dict.get(label, {}) if label and isinstance(self.teencode_dict, dict) else {}
+        teencode = self.teencode_dict if isinstance(self.teencode_dict, dict) else {}
         abbrev = self.abbrev_dict.get(label, {}) if label and isinstance(self.abbrev_dict, dict) else {}
         
         if self.lexicons:
@@ -126,7 +127,8 @@ class MutationGenerator:
         return " ".join(words)
 
     def generate_mutated_dataset(self, num_samples: int = 100):
-        output_dir = self.config.POSTS_DIR
+        # Always use local dataset/posts directory, avoiding Google Drive I/O
+        output_dir = os.path.join(self.config.BASE_DIR, 'dataset', 'posts')
         os.makedirs(output_dir, exist_ok=True)
         
         # Collect existing contents and find max post number
@@ -136,8 +138,8 @@ class MutationGenerator:
         existing_explanations = []
         max_post_num = 0
         import re
-        if os.path.exists(self.config.POSTS_DIR):
-            post_folders = os.listdir(self.config.POSTS_DIR)
+        if os.path.exists(output_dir):
+            post_folders = os.listdir(output_dir)
             for post_folder in post_folders:
                 match = re.search(r'\d+', post_folder)
                 if match:
@@ -151,12 +153,12 @@ class MutationGenerator:
             
             from tqdm import tqdm
             for post_folder in tqdm(sampled_folders, desc="Loading context"):
-                content_path = os.path.join(self.config.POSTS_DIR, post_folder, 'text.txt')
+                content_path = os.path.join(output_dir, post_folder, 'text.txt')
                 if os.path.exists(content_path):
                     with open(content_path, 'r', encoding='utf-8') as f:
                         existing_contents.append(f.read())
                         
-                json_path = os.path.join(self.config.POSTS_DIR, post_folder, 'post.json')
+                json_path = os.path.join(output_dir, post_folder, 'post.json')
                 if os.path.exists(json_path):
                     try:
                         with open(json_path, 'r', encoding='utf-8') as f:
@@ -170,10 +172,13 @@ class MutationGenerator:
         if not existing_contents:
             print(f"No existing posts found to mutate from. Will use purely synthetic content.")
             
+        existing_platforms = [p for p in existing_platforms if p != "synthetic"]
+        existing_account_types = [a for a in existing_account_types if a != "synthetic"]
+        existing_explanations = [e for e in existing_explanations if e != "synthetic_mutation"]
 
-        if not existing_platforms: existing_platforms = ["synthetic"]
-        if not existing_account_types: existing_account_types = ["synthetic"]
-        if not existing_explanations: existing_explanations = ["synthetic_mutation"]
+        if not existing_platforms: existing_platforms = ["Facebook", "Zalo", "Tiktok", "Instagram", "Website"]
+        if not existing_account_types: existing_account_types = ["Personal", "Page", "Group", "Unknown"]
+        if not existing_explanations: existing_explanations = ["Chứa từ khóa lừa đảo", "Kêu gọi chuyển khoản", "Không rõ nguồn gốc", "Spam", "Bài đăng đáng ngờ"]
             
         current_post_num = max_post_num + 1
 
@@ -184,7 +189,7 @@ class MutationGenerator:
         end_date = datetime.datetime(2026, 1, 6)
         
         all_labels = set()
-        for d in [self.keywords, self.teencode_dict, self.abbrev_dict]:
+        for d in [self.keywords, self.abbrev_dict]:
             if isinstance(d, dict):
                 all_labels.update(d.keys())
         all_labels = list(all_labels)
@@ -218,7 +223,7 @@ class MutationGenerator:
                 "interactions": random.randint(0, 1000),
                 "platform": random.choice(existing_platforms),
                 "account_type": random.choice(existing_account_types),
-                "label": self.label_map.get(chosen_label, 1) if chosen_label else random.randint(0, 1),
+                "label": 0 if chosen_label == "legitimate" else 1,
                 "explanation": random.choice(existing_explanations),
                 "content_file": "text.txt"
             }
@@ -228,6 +233,8 @@ class MutationGenerator:
         print(f"Generated {num_samples} mutated posts at {output_dir}")
 
 if __name__ == "__main__":
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from config import Config
     generator = MutationGenerator(Config)
-    generator.generate_mutated_dataset(10)
+    generator.generate_mutated_dataset(5000)
