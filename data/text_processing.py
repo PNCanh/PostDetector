@@ -10,7 +10,12 @@ class TextProcessor:
     def __init__(self, config_class):
         self.config = config_class
         self.teencode_dict = self._load_json_dict(self.config.TEENCODE_FILE)
-        self.abbrev_dict = self._load_json_dict(self.config.ABBREVIATION_FILE)
+        
+        abbrev_raw = self._load_json_dict(self.config.ABBREVIATION_FILE)
+        self.abbrev_dict = {}
+        for category, mappings in abbrev_raw.items():
+            if isinstance(mappings, dict):
+                self.abbrev_dict.update(mappings)
         
         # Optional Emoji mapping could be loaded if available, skipping for simplicity unless provided
         self.emoji_dict = {} 
